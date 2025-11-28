@@ -1,0 +1,10 @@
+node_modules
+dist
+build
+.next
+coverage
+*.min.js
+pnpm-lock.yaml
+.turbo
+packages/generated
+packages/db/migrations

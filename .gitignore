@@ -1,0 +1,54 @@
+# dependencies
+node_modules
+.yarn/*
+!.yarn/cache
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions
+.yarn/install-state.gz
+
+# misc
+.DS_Store
+*.pem
+*.env
+temp/
+dev.db
+
+# testing
+cypress/videos
+cypress/screenshots
+videos
+screenshots
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.next
+out
+static
+
+# IDE
+.idea
+.eslintcache
+
+# storybook
+build-storybook.log
+ui/storybook-static
+
+# database data folder
+postgres-data
+
+**/dist
+
+*.tsbuildinfo
+
+**/playground.tsx
+.turbo
+.pnpm-store/
+**/.#*
+.nvmrc
+**/.vscode
+**/.react-email
