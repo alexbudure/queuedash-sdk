@@ -1,6 +1,6 @@
 # @queuedash/sdk
 
-Official SDK for Queuedash - Real-time monitoring for BullMQ, Bull, and Bee-Queue.
+Official SDK for Queuedash - Real-time monitoring for BullMQ, Bull, Bee-Queue, and GroupMQ.
 
 ## Installation
 
@@ -14,7 +14,7 @@ yarn add @queuedash/sdk
 
 ## Quick Start
 
-The SDK auto-detects your queue library (BullMQ, Bull, or Bee-Queue) - just use `attach()`:
+The SDK auto-detects your queue library (BullMQ, Bull, Bee-Queue, or GroupMQ) - just use `attach()`:
 
 ### BullMQ
 
@@ -157,13 +157,9 @@ The SDK is production-ready with multiple layers of protection:
 
 ## Features
 
-- **Auto-detection**: Works with BullMQ, Bull, and Bee-Queue automatically
+- **Auto-detection**: Works with BullMQ, Bull, Bee-Queue, and GroupMQ automatically
 - **Real-time sync**: Jobs are synced as events happen
 - **Smart batching**: Events are automatically batched for performance
 - **Auto-retry**: Failed syncs are automatically retried
 - **Zero config**: Works out of the box with sensible defaults
 - **TypeScript**: Full TypeScript support
-
-## License
-
-MIT

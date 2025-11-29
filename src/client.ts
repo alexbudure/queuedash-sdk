@@ -77,7 +77,7 @@ export class Queuedash {
 
   /**
    * Attach a queue or worker for monitoring.
-   * Auto-detects the queue library (BullMQ, Bull, Bee-Queue).
+   * Auto-detects the queue library (BullMQ, Bull, Bee-Queue, GroupMQ).
    *
    * @example
    * ```ts
@@ -111,7 +111,7 @@ export class Queuedash {
         break;
       default:
         throw new Error(
-          "Queuedash: Unknown queue type. Supported: BullMQ Queue/Worker, Bull, Bee-Queue",
+          "Queuedash: Unknown queue type. Supported: BullMQ Queue/Worker, Bull, Bee-Queue, GroupMQ",
         );
     }
 
