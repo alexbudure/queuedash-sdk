@@ -109,7 +109,7 @@ describe("Queuedash SDK", () => {
       jest.advanceTimersByTime(100);
 
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining("https://api.queuedash.com"),
+        expect.stringContaining("https://sync.queuedash.com"),
         expect.any(Object),
       );
 
@@ -130,7 +130,7 @@ describe("Queuedash SDK", () => {
       jest.advanceTimersByTime(100);
 
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining("http://localhost:4001"),
+        expect.stringContaining("http://localhost:4002"),
         expect.any(Object),
       );
 
