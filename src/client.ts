@@ -1,5 +1,7 @@
 import { JobData, QueuedashOptions, SyncResponse } from "./types";
 
+const MAX_PAYLOAD_SIZE = 4.5 * 1024 * 1024; // 4.5MB
+
 // Type imports for detection (these are optional peer deps)
 type BullMQQueue = {
   name: string;
@@ -62,8 +64,8 @@ export class Queuedash {
     this.apiUrl =
       options.baseUrl ||
       (process.env.NODE_ENV === "production"
-        ? "https://api.queuedash.com"
-        : "http://localhost:4001");
+        ? "https://sync.queuedash.com"
+        : "http://localhost:4002");
     this.batchSize = options.batchSize ?? 50;
     this.flushInterval = options.flushInterval ?? 100;
     this.maxRetries = options.maxRetries ?? 5;
@@ -192,35 +194,35 @@ export class Queuedash {
 
     this.attachedQueues.add(`bullmq:${queueName}`);
 
-    const syncJobById = (jobId: string) => {
+    const syncJobById = (jobId: string, status?: string) => {
       queue.getJob(jobId).then((job: any) => {
         if (job) {
-          this.syncJob(this.extractBullMQJobData(job, queueName));
+          this.syncJob(this.extractBullMQJobData(job, queueName, status));
         }
       });
     };
 
-    events.on("waiting", ({ jobId }: { jobId: string }) => syncJobById(jobId));
-    events.on("progress", ({ jobId }: { jobId: string }) => syncJobById(jobId));
+    events.on("waiting", ({ jobId }: { jobId: string }) => syncJobById(jobId, "waiting"));
+    events.on("progress", ({ jobId }: { jobId: string }) => syncJobById(jobId, "active"));
     events.on("completed", ({ jobId }: { jobId: string }) =>
-      syncJobById(jobId),
+      syncJobById(jobId, "completed"),
     );
-    events.on("failed", ({ jobId }: { jobId: string }) => syncJobById(jobId));
+    events.on("failed", ({ jobId }: { jobId: string }) => syncJobById(jobId, "failed"));
     events.on("waiting-children", ({ jobId }: { jobId: string }) =>
-      syncJobById(jobId),
+      syncJobById(jobId, "waiting-children"),
     );
-    events.on("added", ({ jobId }: { jobId: string }) => syncJobById(jobId));
-    events.on("active", ({ jobId }: { jobId: string }) => syncJobById(jobId));
-    events.on("delayed", ({ jobId }: { jobId: string }) => syncJobById(jobId));
+    events.on("added", ({ jobId }: { jobId: string }) => syncJobById(jobId, "waiting"));
+    events.on("active", ({ jobId }: { jobId: string }) => syncJobById(jobId, "active"));
+    events.on("delayed", ({ jobId }: { jobId: string }) => syncJobById(jobId, "delayed"));
     events.on("deduplicated", ({ jobId }: { jobId: string }) =>
       syncJobById(jobId),
     );
     events.on("removed", ({ jobId }: { jobId: string }) =>
       this.deleteJob(jobId, queueName),
     );
-    events.on("stalled", ({ jobId }: { jobId: string }) => syncJobById(jobId));
+    events.on("stalled", ({ jobId }: { jobId: string }) => syncJobById(jobId, "waiting"));
     events.on("retries-exhausted", ({ jobId }: { jobId: string }) =>
-      syncJobById(jobId),
+      syncJobById(jobId, "failed"),
     );
   }
 
@@ -293,7 +295,7 @@ export class Queuedash {
     });
   }
 
-  private extractBullMQJobData(job: any, queueName: string): JobData {
+  private extractBullMQJobData(job: any, queueName: string, status?: string): JobData {
     return {
       jobId: job.id as string,
       name: job.name,
@@ -309,6 +311,7 @@ export class Queuedash {
       delay: job.opts?.delay,
       timestamp: job.timestamp,
       progress: typeof job.progress === "number" ? job.progress : null,
+      status,
     };
   }
 
@@ -434,34 +437,24 @@ export class Queuedash {
     this.jobQueue = [];
 
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(
-        () => controller.abort(),
-        this.requestTimeout,
-      );
-
-      const response = await fetch(`${this.apiUrl}/api/v1/jobs/sync`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${this.apiKey}`,
-        },
-        body: JSON.stringify({ jobs: jobsToSync }),
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`HTTP ${response.status}: ${errorText}`);
+      // Check if payload is too large and split into chunks if needed
+      const payload = JSON.stringify({ jobs: jobsToSync });
+      if (payload.length > MAX_PAYLOAD_SIZE) {
+        const chunks = this.splitIntoChunks(jobsToSync, MAX_PAYLOAD_SIZE);
+        for (const chunk of chunks) {
+          await this.sendBatch(chunk);
+          // Remove successfully sent jobs so they aren't re-queued on later chunk failure
+          jobsToSync.splice(0, chunk.length);
+          chunk.forEach((job) => {
+            this.syncingJobIds.delete(`${job.queueName}:${job.jobId}`);
+          });
+        }
+        this.retryCount = 0;
+        this.circuitBreakerFailures = 0;
+        return;
       }
 
-      const result = (await response.json()) as SyncResponse;
-
-      if (!result.success && result.errors) {
-        console.warn("Queuedash: Some jobs failed to sync:", result.errors);
-      }
+      await this.sendBatch(jobsToSync);
 
       this.retryCount = 0;
       this.circuitBreakerFailures = 0;
@@ -512,6 +505,60 @@ export class Queuedash {
       }
     } finally {
       this.isFlushing = false;
+    }
+  }
+
+  private splitIntoChunks(jobs: JobData[], maxSize: number): JobData[][] {
+    const chunks: JobData[][] = [];
+    let currentChunk: JobData[] = [];
+    let currentSize = 0;
+
+    for (const job of jobs) {
+      const jobSize = JSON.stringify(job).length;
+      if (currentSize + jobSize > maxSize && currentChunk.length > 0) {
+        chunks.push(currentChunk);
+        currentChunk = [];
+        currentSize = 0;
+      }
+      currentChunk.push(job);
+      currentSize += jobSize;
+    }
+
+    if (currentChunk.length > 0) {
+      chunks.push(currentChunk);
+    }
+
+    return chunks;
+  }
+
+  private async sendBatch(jobs: JobData[]): Promise<void> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(
+      () => controller.abort(),
+      this.requestTimeout,
+    );
+
+    const response = await fetch(`${this.apiUrl}/api/v1/jobs/sync`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${this.apiKey}`,
+      },
+      body: JSON.stringify({ jobs }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`HTTP ${response.status}: ${errorText}`);
+    }
+
+    const result = (await response.json()) as SyncResponse;
+
+    if (!result.success && result.errors) {
+      console.warn("Queuedash: Some jobs failed to sync:", result.errors);
     }
   }
 

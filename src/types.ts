@@ -1,7 +1,7 @@
 export interface QueuedashOptions {
   /** Your Queuedash API key */
   apiKey: string;
-  /** Override the API URL (defaults to https://api.queuedash.com in production) */
+  /** Override the API URL (defaults to https://sync.queuedash.com in production) */
   baseUrl?: string;
   /** Number of jobs to batch before syncing (default: 50) */
   batchSize?: number;
@@ -34,6 +34,7 @@ export interface JobData {
   delay?: number | null;
   timestamp?: number | null;
   progress?: number | null;
+  status?: string;
 }
 
 export interface SyncResponse {
