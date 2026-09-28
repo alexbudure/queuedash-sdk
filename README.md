@@ -1,6 +1,6 @@
 # @queuedash/sdk
 
-Official SDK for Queuedash - Real-time monitoring for BullMQ, Bull, Bee-Queue, and GroupMQ.
+Official SDK for Queuedash - queue monitoring for BullMQ, Bull, and Bee-Queue.
 
 ## Installation
 
@@ -14,7 +14,7 @@ yarn add @queuedash/sdk
 
 ## Quick Start
 
-The SDK auto-detects your queue library (BullMQ, Bull, Bee-Queue, or GroupMQ) - just use `attach()`:
+The SDK auto-detects your queue library (BullMQ 5+, Bull 4+, or Bee-Queue 1+) - just use `attach()`. First add the queue in Queuedash under the same name: jobs sent for a queue name Queuedash doesn't know are dropped.
 
 ### BullMQ
 
@@ -82,9 +82,9 @@ qd.attach(new Queue("notifications", { connection }));
 
 Get your API key from [Queuedash](https://queuedash.com):
 
-1. Navigate to your project
-2. Click "API Keys"
-3. Generate a new API key
+1. Open your project
+2. In the environment's API Keys section, click Add
+3. Copy the key (it's shown once)
 
 ```bash
 # Set in your environment
@@ -98,7 +98,8 @@ const qd = new Queuedash({
   // Required: Your API key from Queuedash
   apiKey: string,
 
-  // Optional: Custom API URL (default: https://api.queuedash.com)
+  // Optional: Where batches are sent (default: https://sync.queuedash.com
+  // when NODE_ENV is "production", otherwise http://localhost:4002)
   baseUrl?: string,
 
   // Optional: Batch size for syncing jobs (default: 50)
@@ -128,8 +129,9 @@ The SDK is production-ready with multiple layers of protection:
 **Retry Logic**
 
 - Automatic retries up to 5 times (configurable)
-- Exponential backoff: 1s → 2s → 4s → 8s → 16s → 30s (capped)
-- Jobs preserved in local queue until successfully synced
+- Exponential backoff: 1s → 2s → 4s → 8s → 16s (capped at 30s)
+- Jobs that arrive during a backoff are held and sent with the retry
+- A batch that still fails after the last retry (~31s after the first failure, with defaults) is dropped and reported via `onError`
 
 **Circuit Breaker**
 
@@ -147,18 +149,18 @@ The SDK is production-ready with multiple layers of protection:
 
 - SIGTERM/SIGINT handlers flush pending jobs before exit
 - Call `await qd.stop()` to manually stop
-- No jobs lost during normal shutdown
+- Shutdown doesn't wait out a retry backoff: pending jobs get one final attempt, and if that fails they're reported via `onError` instead of retried
 
 **Request Safety**
 
 - 30-second timeout on all HTTP requests
-- Duplicate detection prevents same job syncing twice
+- Only the latest pending update for each job is sent
 - Network errors handled gracefully
 
 ## Features
 
-- **Auto-detection**: Works with BullMQ, Bull, Bee-Queue, and GroupMQ automatically
-- **Real-time sync**: Jobs are synced as events happen
+- **Auto-detection**: Works with BullMQ, Bull, and Bee-Queue automatically
+- **Event-driven**: A job is sent when the SDK hears an event for it (GroupMQ isn't supported)
 - **Smart batching**: Events are automatically batched for performance
 - **Auto-retry**: Failed syncs are automatically retried
 - **Zero config**: Works out of the box with sensible defaults

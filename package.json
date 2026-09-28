@@ -1,7 +1,7 @@
 {
   "name": "@queuedash/sdk",
   "version": "2.0.0",
-  "description": "Queuedash SDK for real-time queue monitoring",
+  "description": "Queuedash SDK for BullMQ, Bull, and Bee-Queue monitoring",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
@@ -24,7 +24,6 @@
     "bullmq",
     "bull",
     "bee-queue",
-    "groupmq",
     "monitoring",
     "dashboard"
   ],
